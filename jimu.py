@@ -13,7 +13,42 @@ from robosuite.utils.transform_utils import convert_quat
 import pdb
 from copy import deepcopy
 
+# print with RED color
+def print_red(skk):
+    print("\033[91m {}\033[00m".format(skk))
+    
+# print with GREEN color
+def print_green(skk):
+    print("\033[92m {}\033[00m".format(skk))
+    
+# print with BLUE color
+def print_blue(skk):
+    print("\033[94m {}\033[00m".format(skk))
+    
+# print with YELLOW color
+def print_yellow(skk):
+    print("\033[93m {}\033[00m".format(skk))
+    
 
+import os, datetime, json
+collect_index = 0
+current_time = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+def debug_log(msg):
+    # log this message into an txt file
+    file_name = f"./log_jimu/debug_log_{current_time}.txt"
+    
+    os.makedirs(os.path.dirname(file_name), exist_ok=True)
+    
+    if isinstance(msg, dict):
+        msg = json.dumps(msg)
+        
+    # collect_index += 1
+    # msg = str(collect_index) + " " + msg
+    with open(file_name, "a") as f:
+        f.write(msg + "\n")
+    
+    
+    
 class Jimu(SingleArmEnv):
     """
     This class corresponds to the jimu task for a single robot arm.
@@ -223,6 +258,9 @@ class Jimu(SingleArmEnv):
 
         # object placement initializer
         self.placement_initializer = placement_initializer
+        
+        # ckpt
+        self.ckpt = {}
 
         super().__init__(
             robots=robots,
@@ -367,13 +405,22 @@ class Jimu(SingleArmEnv):
             #                         (cubeA_pos[2] >= cubeB_pos_ranges[2][1] and cubeA_pos[2] <= cubeB_pos_ranges[2][0])
             
             #### 2. delta judge: cube in a range, but have a delta ####
-            # xyz_delat = 0.1
+            # xyz_delat = 0.05
             # cubeA_in_right_pos = (cubeA_pos[0] >= cubeB_pos_ranges[0][0] - xyz_delat and cubeA_pos[0] <= cubeB_pos_ranges[0][1] + xyz_delat) and \
             #                      (cubeA_pos[1] >= cubeB_pos_ranges[1][0] - xyz_delat and cubeA_pos[1] <= cubeB_pos_ranges[1][1] + xyz_delat) and \
             #                         (cubeA_pos[2] >= cubeB_pos_ranges[2][1] - xyz_delat and cubeA_pos[2] <= cubeB_pos_ranges[2][0] + xyz_delat)
             
             #### 3. distance judge: the L2 distance between cubeA and cubeB ####
-            cubeA_in_right_pos = np.linalg.norm(np.array(cubeA_pos) - np.array(cubeB_pos)) < 0.2
+            # z, y, x = self.jimu_shape
+            # z_index, y_index, x_index = self.src_cube_id
+            visual_cube_B_pos = self.sim.data.body_xpos[self.sim.model.body_name2id(self.target_cubes[-1].root_body)]
+            
+            distance_A_B = np.linalg.norm(np.array(cubeA_pos) - np.array(cubeB_pos))
+            cubeA_in_right_pos = distance_A_B < 0.05
+            
+            # print(f"cubeA_pos: {cubeA_pos}, cubeB_pos: {cubeB_pos}, visual_cube_index: {self.src_cube_id}, visual_cube_B_pos: {visual_cube_B_pos}, distance: {distance_A_B}")
+            # pdb.set_trace()
+            # print(np.linalg.norm(np.array(cubeA_pos) - np.array(cubeB_pos)))
             if not grasping_cubeA and cubeA_in_right_pos:
                 r_stack = 2.0
         except:
@@ -628,17 +675,21 @@ class Jimu(SingleArmEnv):
         Resets simulation internal configurations.
         """
         super()._reset_internal()
+        if self.deterministic_reset:
+            self._reset_internal_ckpt()
+            return
 
         # sample distribution of jimu
         total_num = self.jimu_shape[0] * self.jimu_shape[1] * self.jimu_shape[2]
         src_num = np.random.randint(0, total_num-self.jimu_move_num+1)
-        #src_num = 4
+        # src_num = 1
         tgt_num = src_num + self.jimu_move_num
 
         def find_jimu_pos(m):
             z = 0 # np.random.randint(0, m.shape[0])
             y = np.random.randint(0, m.shape[1])
             x = np.random.randint(0, m.shape[2])
+            # z, y, x = 0, 1, 2
             if (not m[z,y,x]) and (z == 0 or m[z-1, y, x]) and np.random.rand() > 0.5:
                 #print("find",z,y,x, z==0, (z == 0 or m[z-1, y, x]))
                 m[z,y,x] = 1
@@ -652,10 +703,16 @@ class Jimu(SingleArmEnv):
             suc, zyx = find_jimu_pos(self.jimu_src_m)
             if suc:
                 z, y, x = zyx
+                # z, y, x = 2, 2, 2
                 obj_name = 'src_cube_' + str(z)+"_"+str(y)+"_"+str(x)
                 src_obj_names.append(obj_name)
             if self.jimu_src_m.sum() == src_num: break
 
+        ################################################### 1 ckpt ###################################################
+        self.ckpt["src_obj_names"] = src_obj_names
+        self.ckpt["jimu_src_m"] = self.jimu_src_m
+        ################################################### 1 ckpt ###################################################
+        
         # find target pos here
         tgt_obj_name = None
         # target_cube_idxs = []
@@ -663,23 +720,30 @@ class Jimu(SingleArmEnv):
         # while(self.jimu_tgt_m.sum() <= tgt_num):
         while(self.jimu_tgt_m.sum() < tgt_num):
             suc, zyx = find_jimu_pos(self.jimu_tgt_m)
+            #    if True:#suc:
             if suc:
-                 z, y, x = zyx
-                #  target_cube_idxs.append(deepcopy(zyx))
-                #  pdb.set_trace()
-                 max_size = max(self.jimu_shape)
-                 y_range = [0.05*y + 0.1, 0.05*(y+1) + 0.1]
-                 x_range = [0.05*x-0.025*max_size, 0.05*(x+1)-0.025*max_size]
-                 z_range = [self.table_offset[2]+0.05, self.table_offset[2]+0.015]
-                 self.tgt_cube_poses = [[x_range, y_range, z_range]]
-                 tgt_obj_name = "visual_cube_"+str(z)+"_"+str(y)+"_"+str(x)
+                z, y, x = zyx
+                self.src_cube_id = (z, y, x)
+                max_size = max(self.jimu_shape)
+                y_range = [0.05*y + 0.1, 0.05*(y+1) + 0.1]
+                x_range = [0.05*x-0.025*max_size, 0.05*(x+1)-0.025*max_size]
+                z_range = [self.table_offset[2]+0.05, self.table_offset[2]+0.015]
+                self.tgt_cube_poses = [[x_range, y_range, z_range]]
+                tgt_obj_name = "visual_cube_"+str(z)+"_"+str(y)+"_"+str(x)
             if self.jimu_tgt_m.sum() == tgt_num: break
 
-        self.target_cubes_info = {}
+        ################################################### 2 ckpt ###################################################
+        self.ckpt["tgt_obj_name"] = tgt_obj_name
+        self.ckpt["jimu_tgt_m"] = self.jimu_tgt_m
+        self.ckpt["tgt_cube_poses"] = self.tgt_cube_poses
+        ################################################### 2 ckpt ###################################################
         
+        
+        # print_blue(f"reset_internal, {self.deterministic_reset}")
         # Reset all object positions using initializer sampler if we're not directly loading from an xml
         if not self.deterministic_reset:
 
+            # print_red("deterministic_reset is False, so we will reset the object positions")
             # Sample from the placement initializer for all objects
             object_placements = self.placement_initializer.sample()
 
@@ -695,33 +759,94 @@ class Jimu(SingleArmEnv):
                     # pdb.set_trace()
                     self.sim.model.body_pos[self.obj_body_id[obj.name]] = obj_pos
                     self.sim.model.body_quat[self.obj_body_id[obj.name]] = obj_quat
-                    self.target_cubes_info[obj.name] = {}
-                    self.target_cubes_info[obj.name]["obj_pos"] = obj_pos
-                    self.target_cubes_info[obj.name]["obj_quat"] = obj_quat
+                    # print(f"reset {obj.name} to {obj_pos}")
                     # pdb.set_trace()
                 else:
                     self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
         
+        
+        self.sim.forward()
+        
+        self._record_target_infos()
+        # pdb.set_trace()
+        
+    def _load_ckpt(self):
+        ################################################### 1 ckpt ###################################################
+        # self.ckpt["src_obj_names"] = src_obj_names
+        self.jimu_src_m = self.ckpt["jimu_src_m"]
+        ################################################### 1 ckpt ###################################################
+        
+        
+        ################################################### 2 ckpt ###################################################
+        # self.ckpt["tgt_obj_name"] = tgt_obj_name
+        self.jimu_tgt_m = self.ckpt["jimu_tgt_m"]
+        self.tgt_cube_poses = self.ckpt["tgt_cube_poses"]
+        ################################################### 2 ckpt ###################################################
+        
+    
+    def _reset_internal_ckpt(self):
+        print_blue(f"reset_internal, True, {self.deterministic_reset}")
+        print_red("We will reset the object positions from ckpt, now jimu is only compatible with UniformFixSampler, not UniformRandomSampler")
+        
+        self._load_ckpt()
+        # Sample from the placement initializer for all objects
+        object_placements = self.placement_initializer.sample()
+
+        # Loop through all objects and reset their positions
+        # print([obj.name for obj_pos, obj_quat, obj in object_placements.values()])
+        for obj_pos, obj_quat, obj in object_placements.values():
+            if obj.name not in self.ckpt["src_obj_names"] + [self.ckpt["tgt_obj_name"], 'tgt_cube']:
+                continue
+            
+            # print(obj.name)
+
+            if "visual" in obj.name.lower():
+                # pdb.set_trace()
+                self.sim.model.body_pos[self.obj_body_id[obj.name]] = obj_pos
+                self.sim.model.body_quat[self.obj_body_id[obj.name]] = obj_quat
+                # print(f"reset {obj.name} to {obj_pos}")
+                # pdb.set_trace()
+            else:
+                self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
+                
+        self.sim.forward()
+        self._record_target_infos()
+
+    def _record_target_infos(self):
         self.target_cubes = []
-        for cube_name in [tgt_obj_name]:
+        self.target_cubes_info = {}
+        for cube_name in [self.ckpt['tgt_obj_name']]:
             for item in self.jimu_visual_cubes:
                 if cube_name == item.name:
                     self.target_cubes.append(item)
+                    self.target_cubes_info[cube_name] = {}
+                    self.target_cubes_info[cube_name]["obj_pos"] = self.sim.data.body_xpos[self.sim.model.body_name2id(item.root_body)]
+                    self.target_cubes_info[cube_name]["obj_xmat"] = self.sim.data.body_xmat[self.sim.model.body_name2id(item.root_body)]
         assert len(self.target_cubes) == len(self.jimu_tgt_cubes), \
             f"num of jimu_tgt_cubes: {len(self.jimu_tgt_cubes)}, however, num of target_cubes: {len(self.target_cubes)}"
         
-        # self.sim.forward()
+        # print(self.target_cubes_info)
+        # debug_log(f"reset_internal, target_cubes_info: {self.target_cubes_info}")
         
         # cubeB_pos_ranges = self.tgt_cube_poses[-1]
         # cubeB_pos = [
         #         (cubeB_pos_ranges[0][0] + cubeB_pos_ranges[0][1]) / 2,
         #         (cubeB_pos_ranges[1][0] + cubeB_pos_ranges[1][1]) / 2,
         #         (cubeB_pos_ranges[2][0] + cubeB_pos_ranges[2][1]) / 2 - 0.02]
+        # z, y, x = self.jimu_shape
+        # z_index, y_index, x_index = self.src_cube_id
+        # print(f"z_index: {z_index}, y_index: {y_index}, x_index: {x_index}, {self.target_cubes[-1].name}")
+        # src_cube_B_pos = self.sim.data.body_xpos[self.sim.model.body_name2id(self.jimu_src_cubes[z_index * z + y_index *y + x_index].root_body)]
+        # src_cube_B_pos = self.sim.data.body_xpos[self.sim.model.body_name2id(self.jimu_src_cubes[z_index * z + y_index *y + x_index].root_body)]
+        # src_cube_B_pos = self.sim.data.body_xpos[23 + z_index * z + y_index *y + x_index]
+        # visual_cube_B_pos = self.sim.data.body_xpos[self.sim.model.body_name2id(self.jimu_visual_cubes[z_index * z + y_index *y + x_index].root_body)]
+        # visual_cube_B_pos = self.sim.data.body_xpos[self.sim.model.body_name2id(self.target_cubes[-1].root_body)]
+        # visual_cube_B_pos = self.sim.data.body_xpos[49 + z_index * z + y_index * y + x_index]
+        # cube_B_pos_1 = self.sim.data.body_xpos[self.src_cube_ids[-1]]
+        # print(f"cubeA_pos: {cubeA_pos}, cubeB_pos: {cubeB_pos}, src_cube_B_pos: {src_cube_B_pos}, visual_cube_B_pos: {visual_cube_B_pos}, distance: {np.linalg.norm(np.array(cubeA_pos) - np.array(cubeB_pos))}, ")
         
-        # cubeB_pos_1 = self.sim.data.body_xpos[self.sim.model.body_name2id(self.target_cubes[-1].root_body)]
-        
-        # pdb.set_trace()
-
+        # print(f"reset cubeB_pos: {cubeB_pos}, {z_index, y_index, x_index}, src_cube_B_pos: {src_cube_B_pos}, visual_cube_B_pos: {visual_cube_B_pos}")
+    
     def visualize(self, vis_settings):
         """
         In addition to super call, visualize gripper site proportional to the distance to the cube.
@@ -736,7 +861,8 @@ class Jimu(SingleArmEnv):
 
         # Color the gripper visualization site according to its distance to the cube
         if vis_settings["grippers"]:
-            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cube)
+            # self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cube)
+            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.jimu_tgt_cubes[-1])
 
     def _check_success(self):
         """
