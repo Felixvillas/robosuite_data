@@ -413,7 +413,7 @@ class Jimu(SingleArmEnv):
             #### 3. distance judge: the L2 distance between cubeA and cubeB ####
             # z, y, x = self.jimu_shape
             # z_index, y_index, x_index = self.src_cube_id
-            visual_cube_B_pos = self.sim.data.body_xpos[self.sim.model.body_name2id(self.target_cubes[-1].root_body)]
+            # visual_cube_B_pos = self.sim.data.body_xpos[self.sim.model.body_name2id(self.target_cubes[-1].root_body)]
             
             distance_A_B = np.linalg.norm(np.array(cubeA_pos) - np.array(cubeB_pos))
             cubeA_in_right_pos = distance_A_B < 0.05
@@ -674,8 +674,10 @@ class Jimu(SingleArmEnv):
         """
         Resets simulation internal configurations.
         """
+        # raise NotImplementedError
         super()._reset_internal()
         if self.deterministic_reset:
+            self._load_ckpt()
             self._reset_internal_ckpt()
             return
 
@@ -771,15 +773,30 @@ class Jimu(SingleArmEnv):
         # pdb.set_trace()
         
     def _load_ckpt(self):
+        
+        assert hasattr(self, "extra_infos") and self.extra_infos is not None, \
+            f"load ckpt should has attr 'extra_infos', but: hasattr is {hasattr(self, 'extra_infos')} and self.extra_infos is {self.extra_infos}"
+            
         ################################################### 1 ckpt ###################################################
-        # self.ckpt["src_obj_names"] = src_obj_names
-        self.jimu_src_m = self.ckpt["jimu_src_m"]
+        self.ckpt["src_obj_names"] = self.extra_infos["src_obj_names"]
+        # self.ckpt["jimu_src_m"] = self.extra_infos["jimu_src_m"]
         ################################################### 1 ckpt ###################################################
         
         
         ################################################### 2 ckpt ###################################################
-        # self.ckpt["tgt_obj_name"] = tgt_obj_name
-        self.jimu_tgt_m = self.ckpt["jimu_tgt_m"]
+        self.ckpt["tgt_obj_name"] = self.extra_infos["tgt_obj_name"]
+        # self.ckpt["jimu_tgt_m"] = self.extra_infos["jimu_tgt_m"]
+        self.ckpt["tgt_cube_poses"] = self.extra_infos["tgt_cube_poses"]
+        ################################################### 2 ckpt ###################################################
+        
+# --------------------------------------------------------------------------------------------------------------------------#
+
+        ################################################### 1 ckpt ###################################################
+        self.jimu_src_m = self.ckpt["jimu_src_m"]
+        ################################################### 1 ckpt ###################################################
+        
+        ################################################### 2 ckpt ###################################################
+        # self.jimu_tgt_m = self.ckpt["jimu_tgt_m"]
         self.tgt_cube_poses = self.ckpt["tgt_cube_poses"]
         ################################################### 2 ckpt ###################################################
         
@@ -787,8 +804,9 @@ class Jimu(SingleArmEnv):
     def _reset_internal_ckpt(self):
         print_blue(f"reset_internal, True, {self.deterministic_reset}")
         print_red("We will reset the object positions from ckpt, now jimu is only compatible with UniformFixSampler, not UniformRandomSampler")
+        # raise NotImplementedError
         
-        self._load_ckpt()
+        # self._load_ckpt()
         # Sample from the placement initializer for all objects
         object_placements = self.placement_initializer.sample()
 
@@ -810,6 +828,7 @@ class Jimu(SingleArmEnv):
                 self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
                 
         self.sim.forward()
+        # pdb.set_trace()
         self._record_target_infos()
 
     def _record_target_infos(self):
@@ -825,7 +844,7 @@ class Jimu(SingleArmEnv):
         assert len(self.target_cubes) == len(self.jimu_tgt_cubes), \
             f"num of jimu_tgt_cubes: {len(self.jimu_tgt_cubes)}, however, num of target_cubes: {len(self.target_cubes)}"
         
-        # print(self.target_cubes_info)
+        print(self.target_cubes_info)
         # debug_log(f"reset_internal, target_cubes_info: {self.target_cubes_info}")
         
         # cubeB_pos_ranges = self.tgt_cube_poses[-1]
