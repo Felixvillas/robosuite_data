@@ -4,7 +4,7 @@ import numpy as np
 
 from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
 from robosuite.models.arenas import TableArena
-from robosuite.models.objects import BoxObject, JimuObject, JimuVisualObject
+from robosuite.models.objects import BoxObject, JimuObject, JimuVisualObject, SBoxVisualObject
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.mjcf_utils import CustomMaterial
 from robosuite.utils.observables import Observable, sensor
@@ -13,6 +13,12 @@ from robosuite.utils.transform_utils import convert_quat, quat2axisangle
 import pdb
 from copy import deepcopy
 import math
+
+def print_red(msg):
+    print("\033[91m {}\033[00m".format(msg))
+    
+def print_green(msg):
+    print("\033[92m {}\033[00m".format(msg))
 
 
 class SunmaoJimu(SingleArmEnv):
@@ -303,7 +309,8 @@ class SunmaoJimu(SingleArmEnv):
         
         cubeA_in_right_pos = (distance_A_B + (1 - rotation_cos_abs)) < 0.02
         
-        # print(f"distance_A_B: {distance_A_B}, rotation_cos_abs: {rotation_cos_abs}")
+        # pdb.set_trace()
+        print(f"distance_A_B: {distance_A_B}, rotation_cos_abs: {rotation_cos_abs}")
         # print(f"cubeA_pos: {cubeA_pos}, cubeB_pos: {cubeB_pos}, visual_cube_index: {self.src_cube_id}, visual_cube_B_pos: {visual_cube_B_pos}, distance: {distance_A_B}")
         if not grasping_cubeA and cubeA_in_right_pos:
             r_stack = 2.0
@@ -367,7 +374,7 @@ class SunmaoJimu(SingleArmEnv):
             layer_slot_dict[layer] = slot_true
             
         # layer_slot_dict = {1: 6, 2: 5, 3: 4, 4: 3, 5: 2, 6: 1}
-        # layer_slot_dict = {1: 5, 2: 1}
+        # layer_slot_dict = {1: 6, 2: 6}
         
         assert len(layer_slot_dict.keys()) == layer_num
         
@@ -495,7 +502,7 @@ class SunmaoJimu(SingleArmEnv):
                     layer_xyz_dict[layer]["y"] = [0 + next_layer_center["y"] + delta_X, 0 + next_layer_center["y"] + delta_X]
                     layer_xyz_dict[layer]["x"] = [-layer_distance_dict[layer] / 2 + delta_Y + next_layer_center["x"], layer_distance_dict[layer] / 2 + delta_Y + next_layer_center["x"]]
             
-            layer_xyz_dict[layer]["z"] = height / 2 * layer - height / 2
+            layer_xyz_dict[layer]["z"] = height / 2 * layer - height / 2 
             
             # Special processing when slot is set to 1
             if layer_slot_dict[layer] == 1:
@@ -513,6 +520,8 @@ class SunmaoJimu(SingleArmEnv):
         init_y_range = [0.1, 0.2]
         init_x_delta = np.random.uniform(low=init_x_range[0], high=init_x_range[1])
         init_y_delta = np.random.uniform(low=init_y_range[0], high=init_y_range[1])
+        # init_x_delta = 0.
+        # init_y_delta = 0.
         
         for layer in layer_xyz_dict.keys():
             xs, ys = layer_xyz_dict[layer]["x"], layer_xyz_dict[layer]["y"]
@@ -545,15 +554,17 @@ class SunmaoJimu(SingleArmEnv):
         
         for layer, slot in layer_slot_dict.items():
             self.physical_jimu_objects.append(
-                JimuObject(name=f"layer_{layer}" + slot_block_dict[slot]["name"] + f"_1", jimu_type=slot_block_dict[slot]["jimu_type"])
+                JimuObject(name=f"layer_{layer}_" + slot_block_dict[slot]["name"] + f"_1", jimu_type=slot_block_dict[slot]["jimu_type"])
             )
             if layer == layer_num:
                 self.virtual_jimu_objects.append(
-                    JimuVisualObject(name=f"layer_{layer}" + slot_visual_block_dict[slot]["name"] + f"_2", jimu_type=slot_visual_block_dict[slot]["jimu_type"])
+                    JimuVisualObject(name=f"layer_{layer}_" + slot_visual_block_dict[slot]["name"] + f"_2", jimu_type=slot_visual_block_dict[slot]["jimu_type"])
+                    # JimuObject(name=f"layer_{layer}_" + slot_block_dict[slot]["name"] + f"_2", jimu_type=slot_block_dict[slot]["jimu_type"])
+                    # SBoxVisualObject(name=f"layer_{layer}_" + slot_visual_block_dict[slot]["name"] + f"_2")
                 )
             else:
                 self.physical_jimu_objects.append(
-                    JimuObject(name=f"layer_{layer}" + slot_block_dict[slot]["name"] + f"_2", jimu_type=slot_block_dict[slot]["jimu_type"])
+                    JimuObject(name=f"layer_{layer}_" + slot_block_dict[slot]["name"] + f"_2", jimu_type=slot_block_dict[slot]["jimu_type"])
                 )
             
             self.placement_initializer.append_sampler(UniformFixSampler(
@@ -591,6 +602,7 @@ class SunmaoJimu(SingleArmEnv):
         slots = [1, 2, 3, 4, 5, 6]
         slots.remove(correct_slot) # remove the correct_slot
         moved_objects = np.random.choice(np.array(slots), size=num_of_moved_object - 1, replace=False).tolist()
+        # moved_objects = [3, 5]
         moved_objects.append(correct_slot)
         np.random.shuffle(moved_objects)
         
@@ -607,12 +619,20 @@ class SunmaoJimu(SingleArmEnv):
             # [-0.40, -0.36],
             # [-0.36, -0.32],
             
-            [-0.32, -0.28],
-            [-0.28, -0.24],
-            [-0.24, -0.20],
-            [-0.20, -0.16],
-            [-0.16, -0.12],
-            [-0.12, -0.08],
+            # [-0.32, -0.28],
+            # [-0.28, -0.24],
+            # [-0.24, -0.20],
+            # [-0.20, -0.16],
+            # [-0.16, -0.12],
+            # [-0.12, -0.08],
+            
+            
+            [-0.36, -0.24],
+            # [-0.28, -0.24],
+            [-0.24, -0.12],
+            # [-0.20, -0.16],
+            [-0.12, 0.00],
+            # [-0.12, -0.08],
         ]
         
         # print(moved_objects)
@@ -692,7 +712,8 @@ class SunmaoJimu(SingleArmEnv):
         super()._reset_internal()
         
         if self.deterministic_reset:
-            raise NotImplementedError
+            # raise NotImplementedError
+            print_red(f"deterministic_reset == True")
             self._load_ckpt()
             self._reset_internal_ckpt()
             return
@@ -707,10 +728,18 @@ class SunmaoJimu(SingleArmEnv):
             for obj_pos, obj_quat, obj in object_placements.values():
                 #self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
                 if "visual" in obj.name.lower():
-                   self.sim.model.body_pos[self.obj_body_id[obj.name]] = obj_pos
-                   self.sim.model.body_quat[self.obj_body_id[obj.name]] = obj_quat
+                    """
+                    ATTENTION: JimuVisualObject can use this branch; JimuObject cannot use this branch, 
+                    will make self.sim.data.body_xpos and self.sim.data.body_xquat
+                    """
+                    self.sim.model.body_pos[self.obj_body_id[obj.name]] = obj_pos
+                    self.sim.model.body_quat[self.obj_body_id[obj.name]] = obj_quat
                 else:
-                   self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
+                    """
+                    ATTENTION: JimuObject can use this branch; JimuVisualObject cannot use this branch, 
+                    will make IndexError: list index out of range
+                    """
+                    self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
 
     
     def _load_ckpt(self):
@@ -720,38 +749,39 @@ class SunmaoJimu(SingleArmEnv):
         #     f"load ckpt should 'extra_infos' is not None."
         
         ############## ugly, should be improved ##############
-        rows_all_zero = np.all(self.sim.data.body_xpos[49:] == 0, axis=1)
-        # non_zero_rows = np.any(rows_all_zero == False)
-        non_zero_row_index = np.where(rows_all_zero == False)[0]
-        self.tgt_cube_poses = self.sim.data.body_xpos[49:][non_zero_row_index]
+        # rows_all_zero = np.all(self.sim.data.body_xpos[49:] == 0, axis=1)
+        # # non_zero_rows = np.any(rows_all_zero == False)
+        # non_zero_row_index = np.where(rows_all_zero == False)[0]
+        # self.tgt_cube_poses = self.sim.data.body_xpos[49:][non_zero_row_index]
         
         
-        z = 0
-        y = non_zero_row_index.item() // self.jimu_shape[1]
-        x = non_zero_row_index.item() % self.jimu_shape[2]
-        self.ckpt['tgt_obj_name'] = "visual_cube_"+str(z)+"_"+str(y)+"_"+str(x)
+        # z = 0
+        # y = non_zero_row_index.item() // self.jimu_shape[1]
+        # x = non_zero_row_index.item() % self.jimu_shape[2]
+        # self.ckpt['tgt_obj_name'] = "visual_cube_"+str(z)+"_"+str(y)+"_"+str(x)
         # pdb.set_trace()
+        return
 
         
     
     def _reset_internal_ckpt(self):
                 
         self.sim.forward()
-        self._record_target_infos()
+        # self._record_target_infos()
         # pdb.set_trace()
 
-    def _record_target_infos(self):
-        self.target_cubes = []
-        self.target_cubes_info = {}
-        for cube_name in [self.ckpt['tgt_obj_name']]:
-            for item in self.jimu_visual_cubes:
-                if cube_name == item.name:
-                    self.target_cubes.append(item)
-                    self.target_cubes_info[cube_name] = {}
-                    self.target_cubes_info[cube_name]["obj_pos"] = self.sim.data.body_xpos[self.sim.model.body_name2id(item.root_body)]
-                    self.target_cubes_info[cube_name]["obj_xmat"] = self.sim.data.body_xmat[self.sim.model.body_name2id(item.root_body)]
-        assert len(self.target_cubes) == len(self.jimu_tgt_cubes), \
-            f"num of jimu_tgt_cubes: {len(self.jimu_tgt_cubes)}, however, num of target_cubes: {len(self.target_cubes)}"
+    # def _record_target_infos(self):
+    #     self.target_cubes = []
+    #     self.target_cubes_info = {}
+    #     for cube_name in [self.ckpt['tgt_obj_name']]:
+    #         for item in self.jimu_visual_cubes:
+    #             if cube_name == item.name:
+    #                 self.target_cubes.append(item)
+    #                 self.target_cubes_info[cube_name] = {}
+    #                 self.target_cubes_info[cube_name]["obj_pos"] = self.sim.data.body_xpos[self.sim.model.body_name2id(item.root_body)]
+    #                 self.target_cubes_info[cube_name]["obj_xmat"] = self.sim.data.body_xmat[self.sim.model.body_name2id(item.root_body)]
+    #     assert len(self.target_cubes) == len(self.jimu_tgt_cubes), \
+    #         f"num of jimu_tgt_cubes: {len(self.jimu_tgt_cubes)}, however, num of target_cubes: {len(self.target_cubes)}"
     
     def _setup_observables(self):
         """
@@ -942,4 +972,4 @@ class SunmaoJimu(SingleArmEnv):
 
         # Color the gripper visualization site according to its distance to the cube
         if vis_settings["grippers"]:
-            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cubeA)
+            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.moved_correct_jimu_objects[-1])
