@@ -12,7 +12,7 @@ from robosuite.utils.placement_samplers import UniformRandomSampler, UniformFixS
 from robosuite.utils.transform_utils import convert_quat, quat2axisangle
 import pdb
 from copy import deepcopy
-import math
+import math, json, itertools
 
 def print_red(msg):
     print("\033[91m {}\033[00m".format(msg))
@@ -188,6 +188,17 @@ class SunmaoJimu(SingleArmEnv):
 
         # object placement initializer
         self.placement_initializer = placement_initializer
+        
+        # >>>>>>>>>>>>>>>>>>>>>> some attribute of sunmao_jimu <<<<<<<<<<<<<<<<<<<<<<
+        self.num_correct_jimu_objects = 1
+        assert self.num_correct_jimu_objects == 1
+        
+        self.num_objects_per_slot = 2
+        assert self.num_objects_per_slot == 2
+        
+        self.slot_min, self.slot_max = 1, 6
+        
+        # >>>>>>>>>>>>>>>>>>>>>> some attribute of sunmao_jimu <<<<<<<<<<<<<<<<<<<<<<
 
         super().__init__(
             robots=robots,
@@ -264,6 +275,7 @@ class SunmaoJimu(SingleArmEnv):
                 - (float): reward for lifting and aligning
                 - (float): reward for stacking
         """
+        # return 0, 0, 0
         # reaching is successful when the gripper site is close to the center of the cube
         #TODO: for multiple target cubes
         cubeA_pos = self.sim.data.body_xpos[self.sim.model.body_name2id(self.moved_correct_jimu_objects[-1].root_body)]
@@ -325,6 +337,7 @@ class SunmaoJimu(SingleArmEnv):
         """
         Loads an xml model, puts it in self.model
         """
+        print_red(f"self.deterministic_reset: {self.deterministic_reset}")
         super()._load_model()
 
         # pdb.set_trace()
@@ -342,13 +355,163 @@ class SunmaoJimu(SingleArmEnv):
         # Arena always gets set to zero origin
         mujoco_arena.set_origin([0, 0, 0])
         self.placement_initializer = SequentialCompositeSampler(name="ObjectSampler")
+        # >>>>>>>>>>>>>>>>>>>>>> all summao_jimu <<<<<<<<<<<<<<<<<<<<<<
+        slot_block_dict = {
+            1: {"name": "s1", "jimu_type": "1_slot_block"},
+            2: {"name": "s2", "jimu_type": "2_slot_block"},
+            3: {"name": "s3", "jimu_type": "3_slot_block"},
+            4: {"name": "s4", "jimu_type": "4_slot_block"},
+            5: {"name": "s5", "jimu_type": "5_slot_block"},
+            6: {"name": "s6", "jimu_type": "6_slot_block"},
+        }
+        slot_visual_block_dict = {
+            1: {"name": "visual_s1", "jimu_type": "1_slot_block"},
+            2: {"name": "visual_s2", "jimu_type": "2_slot_block"},
+            3: {"name": "visual_s3", "jimu_type": "3_slot_block"},
+            4: {"name": "visual_s4", "jimu_type": "4_slot_block"},
+            5: {"name": "visual_s5", "jimu_type": "5_slot_block"},
+            6: {"name": "visual_s6", "jimu_type": "6_slot_block"},
+        }
         
-        # >>>>>>>>>>>>>>>>>>>>>> some attribute of sunmao_jimu <<<<<<<<<<<<<<<<<<<<<<
-        self.num_correct_jimu_objects = 1
-        assert self.num_correct_jimu_objects == 1
+        physical_jimu_objects = [] # the physical sunmao_jimu in the main body
+        virtual_jimu_objects = [] # the virtual sunmao_jimu in the main body
+        moved_jimu_objects = [] # the physical sunmao_jimu in the moved_jimu_objects: correct here means the jimu should be moved by gripper
         
-        # >>>>>>>>>>>>>>>>>>>>>> some attribute of sunmao_jimu <<<<<<<<<<<<<<<<<<<<<<
+        slot_min, slot_max = self.slot_min, self.slot_max
+        jimu_objects_ys = [
+            [-0.24, -0.20],
+            [-0.20, -0.16],
+            [-0.16, -0.12],
+            [-0.12, -0.08],
+            [-0.08, -0.04],
+            [-0.04, -0.00],
+        ]
+        y = [-0.25, 0, 0.25]
+        x = np.arange(-0.39, 0.39, 0.03).tolist()
+        x_y = list(itertools.product(x, y))
+        x_y_idx = 0
+        # pdb.set_trace()
         
+        for idx, slot in enumerate(reversed(range(slot_min, slot_max + 1))):
+            # physical_jimu_objects
+            # for i in range(self.num_objects_per_slot):
+            physical_jimu_objects.insert(
+                0, 
+                JimuObject(name="physical_" + slot_block_dict[slot]["name"] + f"_{2}", jimu_type=slot_block_dict[slot]["jimu_type"])   
+            )
+            self.placement_initializer.append_sampler(UniformFixSampler(
+                name=f"physical_jimu_objects_slot_{slot}_{1}",
+                mujoco_objects=physical_jimu_objects[0],
+                # x_range=[0.0, 0.0], # or -0.04 and +0.04
+                # y_range=[jimu_objects_ys[idx][0] - 2, jimu_objects_ys[idx][1] - 2],
+                x_range=[x_y[x_y_idx][0], x_y[x_y_idx][0]],
+                y_range=[x_y[x_y_idx][1], x_y[x_y_idx][1]],
+                rotation=math.pi / 2,
+                rotation_axis='z',
+                ensure_object_boundary_in_range=False,
+                ensure_valid_placement=True,
+                reference_pos=self.table_offset,
+                z_offset=-0.2
+            ))
+            x_y_idx += 1
+            physical_jimu_objects.insert(
+                0, 
+                JimuObject(name="physical_" + slot_block_dict[slot]["name"] + f"_{1}", jimu_type=slot_block_dict[slot]["jimu_type"])   
+            )
+            self.placement_initializer.append_sampler(UniformFixSampler(
+                name=f"physical_jimu_objects_slot_{slot}_{2}",
+                mujoco_objects=physical_jimu_objects[0],
+                # x_range=[0.0, 0.0], # or -0.04 and +0.04
+                # y_range=[jimu_objects_ys[idx][0] + 2, jimu_objects_ys[idx][1] + 2],
+                x_range=[x_y[x_y_idx][0], x_y[x_y_idx][0]],
+                y_range=[x_y[x_y_idx][1], x_y[x_y_idx][1]],
+                rotation=math.pi / 2,
+                rotation_axis='z',
+                ensure_object_boundary_in_range=False,
+                ensure_valid_placement=True,
+                reference_pos=self.table_offset,
+                z_offset=-0.2
+            ))
+            x_y_idx += 1
+            # virtual_jimu_objects
+            # for i in range(self.num_objects_per_slot):
+            virtual_jimu_objects.insert(
+                0, 
+                JimuVisualObject(name="virtual_" + slot_visual_block_dict[slot]["name"], jimu_type=slot_visual_block_dict[slot]["jimu_type"])   
+            )
+            self.placement_initializer.append_sampler(UniformFixSampler(
+                name=f"virtual_jimu_objects_slot_{slot}_{1}",
+                mujoco_objects=virtual_jimu_objects[0],
+                # x_range=[0.0, 0.0], # or -0.04 and +0.04
+                # y_range=[jimu_objects_ys[idx][0] - 3, jimu_objects_ys[idx][1] - 3],
+                x_range=[x_y[x_y_idx][0], x_y[x_y_idx][0]],
+                y_range=[x_y[x_y_idx][1], x_y[x_y_idx][1]],
+                rotation=math.pi / 2,
+                rotation_axis='z',
+                ensure_object_boundary_in_range=False,
+                ensure_valid_placement=True,
+                reference_pos=self.table_offset,
+                z_offset=-0.2
+            ))
+            x_y_idx += 1
+            # virtual_jimu_objects.append(
+            #     JimuVisualObject(name="virtual_" + slot_visual_block_dict[slot]["name"] + f"_{2}", jimu_type=slot_visual_block_dict[slot]["jimu_type"])   
+            # )
+            # self.placement_initializer.append_sampler(UniformFixSampler(
+            #     name=f"virtual_jimu_objects_slot_{slot}_{2}",
+            #     mujoco_objects=virtual_jimu_objects[-1],
+            #     # x_range=[0.0, 0.0], # or -0.04 and +0.04
+            #     # y_range=[jimu_objects_ys[idx][0] + 3, jimu_objects_ys[idx][1] + 3],
+            #     x_range=[x_y[x_y_idx][0], x_y[x_y_idx][0]],
+            #     y_range=[x_y[x_y_idx][1], x_y[x_y_idx][1]],
+            #     rotation=0,
+            #     rotation_axis='z',
+            #     ensure_object_boundary_in_range=False,
+            #     ensure_valid_placement=True,
+            #     reference_pos=self.table_offset,
+            #     z_offset=-0.2
+            # ))
+            # x_y_idx += 1
+            
+        print_red(f"x_y_idx: {x_y_idx}")
+        for idx, slot in enumerate(reversed(range(slot_min, slot_max + 1))):
+            # moved_correct_jimu_objects && moved_incorrect_jimu_objects
+            moved_jimu_objects.insert(
+                0, 
+                JimuObject(name="moved_" + slot_block_dict[slot]["name"], jimu_type=slot_block_dict[slot]["jimu_type"])   
+            )
+            self.placement_initializer.append_sampler(UniformFixSampler(
+                name=f"moved_jimu_objects_slot_{slot}",
+                mujoco_objects=moved_jimu_objects[0],
+                # x_range=[0.0, 0.0], # or -0.04 and +0.04
+                # y_range=[jimu_objects_ys[idx][0] - 4, jimu_objects_ys[idx][1] - 4],
+                x_range=[x_y[x_y_idx][0], x_y[x_y_idx][0]],
+                y_range=[x_y[x_y_idx][1], x_y[x_y_idx][1]],
+                rotation=math.pi / 2,
+                rotation_axis='z',
+                ensure_object_boundary_in_range=False,
+                ensure_valid_placement=True,
+                reference_pos=self.table_offset,
+                z_offset=-0.2
+            ))
+            x_y_idx += 1
+
+        print_red(f"x_y_idx: {x_y_idx}")
+        
+        # >>>>>>>>>>>>>>>>>>>>>> all summao_jimu <<<<<<<<<<<<<<<<<<<<<<
+        self.objs = {
+            "physical_jimu_objects": physical_jimu_objects,
+            "virtual_jimu_objects": virtual_jimu_objects, 
+            "moved_jimu_objects": moved_jimu_objects
+        } 
+        # task includes arena, robot, and objects of interest
+        self.model = ManipulationTask(
+            mujoco_arena=mujoco_arena,
+            mujoco_robots=[robot.robot_model for robot in self.robots],
+            mujoco_objects=physical_jimu_objects + virtual_jimu_objects + moved_jimu_objects 
+        )
+    
+    def _sunmao_apperance(self):
         # >>>>>>>>>>>>>>>>>>>>>> sample for summao_jimu appearance <<<<<<<<<<<<<<<<<<<<<<
         
         # sample for the number of layer
@@ -364,7 +527,7 @@ class SunmaoJimu(SingleArmEnv):
                 slot_true = np.random.randint(layer_num, slot_max + 1)
             else:
                 assert layer_slot_dict[layer - 1] is not None
-                slot_true = np.random.randint(layer_num - (layer - 1), layer_slot_dict[layer - 1] + 1)
+                slot_true = np.random.randint(layer_num - (layer - 1), layer_slot_dict[layer - 1])
             
             # if layer == layer_num:
             #     slot_true = np.random.randint(slot_min, slot_max)
@@ -528,72 +691,57 @@ class SunmaoJimu(SingleArmEnv):
             layer_xyz_dict[layer]["x"] = [xs[0] + init_x_delta, xs[1] + init_x_delta]
             layer_xyz_dict[layer]["y"] = [ys[0] + init_y_delta, ys[1] + init_y_delta]
         
-        # print(layer_xyz_dict)
-        # pdb.set_trace()
-        slot_block_dict = {
-            1: {"name": "s1", "jimu_type": "1_slot_block"},
-            2: {"name": "s2", "jimu_type": "2_slot_block"},
-            3: {"name": "s3", "jimu_type": "3_slot_block"},
-            4: {"name": "s4", "jimu_type": "4_slot_block"},
-            5: {"name": "s5", "jimu_type": "5_slot_block"},
-            6: {"name": "s6", "jimu_type": "6_slot_block"},
-        }
-        slot_visual_block_dict = {
-            1: {"name": "visual_s1", "jimu_type": "1_slot_block"},
-            2: {"name": "visual_s2", "jimu_type": "2_slot_block"},
-            3: {"name": "visual_s3", "jimu_type": "3_slot_block"},
-            4: {"name": "visual_s4", "jimu_type": "4_slot_block"},
-            5: {"name": "visual_s5", "jimu_type": "5_slot_block"},
-            6: {"name": "visual_s6", "jimu_type": "6_slot_block"},
-        }
-        
         self.physical_jimu_objects = [] # the physical sunmao_jimu in the main body
         self.virtual_jimu_objects = [] # the virtual sunmao_jimu in the main body
         self.moved_correct_jimu_objects = [] # the correct physical sunmao_jimu in the moved_jimu_objects: correct here means the jimu should be moved by gripper
         self.moved_incorrect_jimu_objects = [] # the incorrect physical sunmao_jimu that can be moved by gripper
         
-        for layer, slot in layer_slot_dict.items():
+        physical_jimu_names = []
+        virtual_jimu_names = []
+        moved_jimu_names = []
+        # print_green(layer_slot_dict)
+        # print_green(f"{json.dumps(layer_xyz_dict)}")
+        for layer, slot in reversed(layer_slot_dict.items()):
             self.physical_jimu_objects.append(
-                JimuObject(name=f"layer_{layer}_" + slot_block_dict[slot]["name"] + f"_1", jimu_type=slot_block_dict[slot]["jimu_type"])
+                self.objs["physical_jimu_objects"][self.num_objects_per_slot * (slot - 1)]
             )
+            physical_jimu_names.append(f"physical_jimu_objects_slot_{slot}_1")
             if layer == layer_num:
                 self.virtual_jimu_objects.append(
-                    JimuVisualObject(name=f"layer_{layer}_" + slot_visual_block_dict[slot]["name"] + f"_2", jimu_type=slot_visual_block_dict[slot]["jimu_type"])
-                    # JimuObject(name=f"layer_{layer}_" + slot_block_dict[slot]["name"] + f"_2", jimu_type=slot_block_dict[slot]["jimu_type"])
-                    # SBoxVisualObject(name=f"layer_{layer}_" + slot_visual_block_dict[slot]["name"] + f"_2")
+                    # self.objs["virtual_jimu_objects"][self.num_objects_per_slot * (slot - 1)]
+                    self.objs["virtual_jimu_objects"][slot - 1]
                 )
+                virtual_jimu_names.append(f"virtual_jimu_objects_slot_{slot}_1")
             else:
                 self.physical_jimu_objects.append(
-                    JimuObject(name=f"layer_{layer}_" + slot_block_dict[slot]["name"] + f"_2", jimu_type=slot_block_dict[slot]["jimu_type"])
+                    self.objs["physical_jimu_objects"][self.num_objects_per_slot * (slot - 1) + 1]
                 )
+                physical_jimu_names.append(f"physical_jimu_objects_slot_{slot}_2")
             
-            self.placement_initializer.append_sampler(UniformFixSampler(
-                name=f"ObjectSampler_layer_{layer}_slot_{slot}_1",
-                mujoco_objects=self.physical_jimu_objects[-2] if layer != layer_num else self.physical_jimu_objects[-1],
-                x_range=[layer_xyz_dict[layer]["x"][0], layer_xyz_dict[layer]["x"][0]], # or -0.04 and +0.04
-                y_range=[layer_xyz_dict[layer]["y"][0], layer_xyz_dict[layer]["y"][0]], # or -0.04 and +0.04
-                rotation=layer_rotation_dict[layer],
-                rotation_axis='z',
-                ensure_object_boundary_in_range=False,
-                ensure_valid_placement=True,
-                reference_pos=self.table_offset,
-                z_offset=layer_xyz_dict[layer]["z"]
-            ))
+            if layer != layer_num:
+                # for i in range(self.num_objects_per_slot):
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{1}"].x_range = [layer_xyz_dict[layer]["x"][0], layer_xyz_dict[layer]["x"][0]]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{1}"].y_range = [layer_xyz_dict[layer]["y"][0], layer_xyz_dict[layer]["y"][0]]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{1}"].z_offset = layer_xyz_dict[layer]["z"]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{1}"].rotation = layer_rotation_dict[layer]
+                
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{2}"].x_range = [layer_xyz_dict[layer]["x"][1], layer_xyz_dict[layer]["x"][1]]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{2}"].y_range = [layer_xyz_dict[layer]["y"][1], layer_xyz_dict[layer]["y"][1]]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{2}"].z_offset = layer_xyz_dict[layer]["z"]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{2}"].rotation = layer_rotation_dict[layer]
+            else:
+                # for i in range(self.num_objects_per_slot - 1):
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{1}"].x_range = [layer_xyz_dict[layer]["x"][0], layer_xyz_dict[layer]["x"][0]]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{1}"].y_range = [layer_xyz_dict[layer]["y"][0], layer_xyz_dict[layer]["y"][0]]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{1}"].z_offset = layer_xyz_dict[layer]["z"]
+                self.placement_initializer.samplers[f"physical_jimu_objects_slot_{slot}_{1}"].rotation = layer_rotation_dict[layer]
+                
+                # i = self.num_objects_per_slot - 1
+                self.placement_initializer.samplers[f"virtual_jimu_objects_slot_{slot}_{1}"].x_range = [layer_xyz_dict[layer]["x"][1], layer_xyz_dict[layer]["x"][1]]
+                self.placement_initializer.samplers[f"virtual_jimu_objects_slot_{slot}_{1}"].y_range = [layer_xyz_dict[layer]["y"][1], layer_xyz_dict[layer]["y"][1]]
+                self.placement_initializer.samplers[f"virtual_jimu_objects_slot_{slot}_{1}"].z_offset = layer_xyz_dict[layer]["z"]
+                self.placement_initializer.samplers[f"virtual_jimu_objects_slot_{slot}_{1}"].rotation = layer_rotation_dict[layer]
             
-            self.placement_initializer.append_sampler(UniformFixSampler(
-                name=f"ObjectSampler_layer_{layer}_slot_{slot}_2",
-                mujoco_objects=self.physical_jimu_objects[-1] if layer != layer_num else self.virtual_jimu_objects[-1],
-                x_range=[layer_xyz_dict[layer]["x"][1], layer_xyz_dict[layer]["x"][1]], # or -0.04 and +0.04
-                y_range=[layer_xyz_dict[layer]["y"][1], layer_xyz_dict[layer]["y"][1]], # or -0.04 and +0.04
-                rotation=layer_rotation_dict[layer],
-                rotation_axis='z',
-                ensure_object_boundary_in_range=False,
-                ensure_valid_placement=True,
-                reference_pos=self.table_offset,
-                z_offset=layer_xyz_dict[layer]["z"]
-            ))
-            
-
         #### object to be moved
         # num_of_moved_object = np.random.randint(slot_min, slot_max + 1)
         num_of_moved_object = 3 # do not random for the constant length of symbolic obs, but, ugly. May be improved in the future
@@ -607,26 +755,6 @@ class SunmaoJimu(SingleArmEnv):
         np.random.shuffle(moved_objects)
         
         y_ranges=[
-            # [-0.24, -0.20],
-            # [-0.20, -0.16],
-            # [-0.16, -0.12],
-            # [-0.12, -0.08],
-            # [-0.08, -0.04],
-            # [-0.04, -0.00]
-            
-            # [-0.48, -0.44],
-            # [-0.44, -0.40],
-            # [-0.40, -0.36],
-            # [-0.36, -0.32],
-            
-            # [-0.32, -0.28],
-            # [-0.28, -0.24],
-            # [-0.24, -0.20],
-            # [-0.20, -0.16],
-            # [-0.16, -0.12],
-            # [-0.12, -0.08],
-            
-            
             [-0.36, -0.24],
             # [-0.28, -0.24],
             [-0.24, -0.12],
@@ -641,51 +769,33 @@ class SunmaoJimu(SingleArmEnv):
         ]
         self.moved_incorrect_jimu_types = []
         for idx, slot in enumerate(moved_objects):
+            moved_jimu_names.append(f"moved_jimu_objects_slot_{slot}")
             if slot == correct_slot:
                 self.moved_correct_jimu_objects.append(
-                    JimuObject(
-                        name=f"moved_" + "correct_" + slot_block_dict[slot]["name"], 
-                        jimu_type=slot_block_dict[slot]["jimu_type"]
-                    )
+                    self.objs["moved_jimu_objects"][slot - 1]
                 )
             else:
                 self.moved_incorrect_jimu_objects.append(
-                    JimuObject(
-                        name=f"moved_" + slot_block_dict[slot]["name"], 
-                        jimu_type=slot_block_dict[slot]["jimu_type"]
-                    )
+                    self.objs["moved_jimu_objects"][slot - 1]
                 )
                 self.moved_incorrect_jimu_types.append(
                     np.eye(slot_max)[slot - 1].tolist()
                 )
-            self.placement_initializer.append_sampler(UniformFixSampler(
-                name=f"ObjectSampler_moved_correct_{idx}" if slot == correct_slot else f"ObjectSampler_moved_{idx}",
-                mujoco_objects=self.moved_correct_jimu_objects[-1] if slot == correct_slot else self.moved_incorrect_jimu_objects[-1],
-                x_range=[-0.1, -0.1],
-                y_range=y_ranges[idx],
-                rotation=0,
-                rotation_axis='z',
-                ensure_object_boundary_in_range=False,
-                ensure_valid_placement=True,
-                reference_pos=self.table_offset,
-                z_offset=0.01,
-            ))
+            self.placement_initializer.samplers[f"moved_jimu_objects_slot_{slot}"].x_range = [-0.1, -0.1]
+            self.placement_initializer.samplers[f"moved_jimu_objects_slot_{slot}"].y_range = y_ranges[idx]
+            self.placement_initializer.samplers[f"moved_jimu_objects_slot_{slot}"].z_offset = 0.01
+            self.placement_initializer.samplers[f"moved_jimu_objects_slot_{slot}"].rotation = 0
         
-        # pdb.set_trace()
         # >>>>>>>>>>>>>>>>>>>>>> sample for summao_jimu appearance <<<<<<<<<<<<<<<<<<<<<<
-
-        self.objs = self.physical_jimu_objects + self.virtual_jimu_objects + self.moved_incorrect_jimu_objects + self.moved_correct_jimu_objects
-        # task includes arena, robot, and objects of interest
-        self.model = ManipulationTask(
-            mujoco_arena=mujoco_arena,
-            mujoco_robots=[robot.robot_model for robot in self.robots],
-            mujoco_objects=self.objs
-        )
         
         # now only compatiable with moved 1 object
         assert len(self.virtual_jimu_objects) == self.num_correct_jimu_objects\
             and len(self.moved_correct_jimu_objects) == self.num_correct_jimu_objects\
                 and len(self.moved_correct_jimu_types) == self.num_correct_jimu_objects
+        
+        # self.instance_objs_name = [item.name for item in self.physical_jimu_objects + self.virtual_jimu_objects + self.moved_correct_jimu_objects + self.moved_incorrect_jimu_objects]
+        self.instance_objs_name = physical_jimu_names + virtual_jimu_names + moved_jimu_names
+        print_green(f"slots: {layer_slot_dict}, instance_objs_name: {self.instance_objs_name}")
 
 
     def _setup_references(self):
@@ -701,7 +811,7 @@ class SunmaoJimu(SingleArmEnv):
         #self.cubeB_body_id = self.sim.model.body_name2id(self.cubeB.root_body)
         self.obj_body_id = {}
         self.obj_geom_id = {}
-        for obj in self.objs:
+        for obj in self.objs["physical_jimu_objects"] + self.objs["virtual_jimu_objects"] + self.objs["moved_jimu_objects"]:
             self.obj_body_id[obj.name] = self.sim.model.body_name2id(obj.root_body)
             self.obj_geom_id[obj.name] = [self.sim.model.geom_name2id(g) for g in obj.contact_geoms]
 
@@ -714,18 +824,25 @@ class SunmaoJimu(SingleArmEnv):
         if self.deterministic_reset:
             # raise NotImplementedError
             print_red(f"deterministic_reset == True")
-            self._load_ckpt()
             self._reset_internal_ckpt()
+            self._load_ckpt()
             return
 
+        
+        self._sunmao_apperance()
         # Reset all object positions using initializer sampler if we're not directly loading from an xml
+        # pdb.set_trace()
         if not self.deterministic_reset:
 
             # Sample from the placement initializer for all objects
             object_placements = self.placement_initializer.sample()
+            # pdb.set_trace()
 
             # Loop through all objects and reset their positions
             for obj_pos, obj_quat, obj in object_placements.values():
+                # if obj.name not in self.instance_objs_name:
+                #     continue
+                # pdb.set_trace()
                 #self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
                 if "visual" in obj.name.lower():
                     """
@@ -740,26 +857,48 @@ class SunmaoJimu(SingleArmEnv):
                     will make IndexError: list index out of range
                     """
                     self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
-
+        # pdb.set_trace()
     
     def _load_ckpt(self):
         
-        # pdb.set_trace()
-        # assert self.extra_infos is not None, \
-        #     f"load ckpt should 'extra_infos' is not None."
-        
-        ############## ugly, should be improved ##############
-        # rows_all_zero = np.all(self.sim.data.body_xpos[49:] == 0, axis=1)
-        # # non_zero_rows = np.any(rows_all_zero == False)
-        # non_zero_row_index = np.where(rows_all_zero == False)[0]
-        # self.tgt_cube_poses = self.sim.data.body_xpos[49:][non_zero_row_index]
+        ############## variable should be reset ##############
+        self.physical_jimu_objects = []
+        self.virtual_jimu_objects = []
+        self.moved_correct_jimu_objects, self.moved_correct_jimu_types = [], []
+        self.moved_incorrect_jimu_objects, self.moved_incorrect_jimu_types = [], []
+        ############## variable should be reset ##############
         
         
-        # z = 0
-        # y = non_zero_row_index.item() // self.jimu_shape[1]
-        # x = non_zero_row_index.item() % self.jimu_shape[2]
-        # self.ckpt['tgt_obj_name'] = "visual_cube_"+str(z)+"_"+str(y)+"_"+str(x)
-        # pdb.set_trace()
+        ############## ugly, maybe should be improved ##############
+        start_idx = 23
+        physical_jimu_idx = 23 + 12
+        virtual_jimu_idx = 23 + 12 + 6
+        moved_jimu_idx = 23 + 12 + 6 + 6
+        assert moved_jimu_idx == self.sim.data.body_xpos.shape[0]
+        table_z = 0.8
+        delta_z_error = 0.01
+        table_z -= delta_z_error
+        
+        # physical_jimu
+        physical_jimu_xpos = self.sim.data.body_xpos[start_idx: physical_jimu_idx]
+        physical_jimu_idxs = np.where(physical_jimu_xpos[:, -1] > table_z)[0]
+        self.physical_jimu_objects = [self.objs["physical_jimu_objects"][idx] for idx in physical_jimu_idxs]
+        
+        # virtual_jimu
+        virtual_jimu_xpos = self.sim.data.body_xpos[physical_jimu_idx: virtual_jimu_idx]
+        virtual_jimu_idxs = np.where(virtual_jimu_xpos[:, -1] > table_z)[0]
+        self.virtual_jimu_objects = [self.objs["virtual_jimu_objects"][idx] for idx in virtual_jimu_idxs]
+        
+        # moved_jimu
+        moved_jimu_xpos = self.sim.data.body_xpos[virtual_jimu_idx: moved_jimu_idx]
+        moved_jimu_idxs = np.where(moved_jimu_xpos[:, -1] > table_z)[0]
+        moved_correct_jimu_idxs = [idx for idx in moved_jimu_idxs if idx in virtual_jimu_idxs]
+        moved_incorrect_jimu_idxs = [idx for idx in moved_jimu_idxs if idx not in moved_correct_jimu_idxs]
+        self.moved_correct_jimu_objects = [self.objs["moved_jimu_objects"][idx] for idx in moved_correct_jimu_idxs]
+        self.moved_correct_jimu_types = [np.eye(self.slot_max)[idx] for idx in moved_correct_jimu_idxs]
+        self.moved_incorrect_jimu_objects = [self.objs["moved_jimu_objects"][idx] for idx in moved_incorrect_jimu_idxs]
+        self.moved_incorrect_jimu_types = [np.eye(self.slot_max)[idx] for idx in moved_incorrect_jimu_idxs]
+        ############## ugly, maybe should be improved ##############
         return
 
         
