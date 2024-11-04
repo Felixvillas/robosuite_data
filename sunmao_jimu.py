@@ -322,7 +322,7 @@ class SunmaoJimu(SingleArmEnv):
         cubeA_in_right_pos = (distance_A_B + (1 - rotation_cos_abs)) < 0.02
         
         # pdb.set_trace()
-        print(f"distance_A_B: {distance_A_B}, rotation_cos_abs: {rotation_cos_abs}")
+        # print(f"distance_A_B: {distance_A_B}, rotation_cos_abs: {rotation_cos_abs}")
         # print(f"cubeA_pos: {cubeA_pos}, cubeB_pos: {cubeB_pos}, visual_cube_index: {self.src_cube_id}, visual_cube_B_pos: {visual_cube_B_pos}, distance: {distance_A_B}")
         if not grasping_cubeA and cubeA_in_right_pos:
             r_stack = 2.0
@@ -337,7 +337,7 @@ class SunmaoJimu(SingleArmEnv):
         """
         Loads an xml model, puts it in self.model
         """
-        print_red(f"self.deterministic_reset: {self.deterministic_reset}")
+        # print_red(f"self.deterministic_reset: {self.deterministic_reset}")
         super()._load_model()
 
         # pdb.set_trace()
@@ -473,7 +473,7 @@ class SunmaoJimu(SingleArmEnv):
             # ))
             # x_y_idx += 1
             
-        print_red(f"x_y_idx: {x_y_idx}")
+        # print_red(f"x_y_idx: {x_y_idx}")
         for idx, slot in enumerate(reversed(range(slot_min, slot_max + 1))):
             # moved_correct_jimu_objects && moved_incorrect_jimu_objects
             moved_jimu_objects.insert(
@@ -496,7 +496,7 @@ class SunmaoJimu(SingleArmEnv):
             ))
             x_y_idx += 1
 
-        print_red(f"x_y_idx: {x_y_idx}")
+        # print_red(f"x_y_idx: {x_y_idx}")
         
         # >>>>>>>>>>>>>>>>>>>>>> all summao_jimu <<<<<<<<<<<<<<<<<<<<<<
         self.objs = {
@@ -795,7 +795,7 @@ class SunmaoJimu(SingleArmEnv):
         
         # self.instance_objs_name = [item.name for item in self.physical_jimu_objects + self.virtual_jimu_objects + self.moved_correct_jimu_objects + self.moved_incorrect_jimu_objects]
         self.instance_objs_name = physical_jimu_names + virtual_jimu_names + moved_jimu_names
-        print_green(f"slots: {layer_slot_dict}, instance_objs_name: {self.instance_objs_name}")
+        # print_green(f"slots: {layer_slot_dict}, instance_objs_name: {self.instance_objs_name}, moved_objects: {moved_objects}")
 
 
     def _setup_references(self):
@@ -823,17 +823,17 @@ class SunmaoJimu(SingleArmEnv):
         
         if self.deterministic_reset:
             # raise NotImplementedError
-            print_red(f"deterministic_reset == True")
-            self._reset_internal_ckpt()
-            self._load_ckpt()
+            # print_red(f"deterministic_reset == True")
+            # raise NotImplementedError
+            # self._reset_internal_ckpt()
+            # self._load_ckpt()
             return
 
-        
-        self._sunmao_apperance()
         # Reset all object positions using initializer sampler if we're not directly loading from an xml
         # pdb.set_trace()
         if not self.deterministic_reset:
 
+            self._sunmao_apperance()
             # Sample from the placement initializer for all objects
             object_placements = self.placement_initializer.sample()
             # pdb.set_trace()
@@ -844,7 +844,7 @@ class SunmaoJimu(SingleArmEnv):
                 #     continue
                 # pdb.set_trace()
                 #self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
-                if "visual" in obj.name.lower():
+                if "virtual" in obj.name.lower():
                     """
                     ATTENTION: JimuVisualObject can use this branch; JimuObject cannot use this branch, 
                     will make self.sim.data.body_xpos and self.sim.data.body_xquat
@@ -859,8 +859,33 @@ class SunmaoJimu(SingleArmEnv):
                     self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
         # pdb.set_trace()
     
-    def _load_ckpt(self):
-        
+    def _load_ckpt_sunmao(self):
+        # # Sample from the placement initializer for all objects
+        # object_placements = self.placement_initializer.sample()
+        # # pdb.set_trace()
+
+        # # Loop through all objects and reset their positions
+        # for obj_pos, obj_quat, obj in object_placements.values():
+        #     # if obj.name not in self.instance_objs_name:
+        #     #     continue
+        #     # pdb.set_trace()
+        #     #self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
+        #     if "virtual" in obj.name.lower():
+        #         """
+        #         ATTENTION: JimuVisualObject can use this branch; JimuObject cannot use this branch, 
+        #         will make self.sim.data.body_xpos and self.sim.data.body_xquat
+        #         """
+        #         self.sim.model.body_pos[self.obj_body_id[obj.name]] = obj_pos
+        #         self.sim.model.body_quat[self.obj_body_id[obj.name]] = obj_quat
+        #     else:
+        #         """
+        #         ATTENTION: JimuObject can use this branch; JimuVisualObject cannot use this branch, 
+        #         will make IndexError: list index out of range
+        #         """
+        #         self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
+        # raise NotImplementedError
+        # self.sim.forward()
+        # pdb.set_trace()
         ############## variable should be reset ##############
         self.physical_jimu_objects = []
         self.virtual_jimu_objects = []
@@ -899,13 +924,15 @@ class SunmaoJimu(SingleArmEnv):
         self.moved_incorrect_jimu_objects = [self.objs["moved_jimu_objects"][idx] for idx in moved_incorrect_jimu_idxs]
         self.moved_incorrect_jimu_types = [np.eye(self.slot_max)[idx] for idx in moved_incorrect_jimu_idxs]
         ############## ugly, maybe should be improved ##############
+        # pdb.set_trace()
         return
 
         
     
     def _reset_internal_ckpt(self):
                 
-        self.sim.forward()
+        return
+        # self.sim.forward()
         # self._record_target_infos()
         # pdb.set_trace()
 
